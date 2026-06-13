@@ -1,0 +1,19 @@
+{
+  "name": "io.github.woshilaohei/mindcore-memory",
+  "version": "0.1.3",
+  "description": "AI long-term memory MCP server with importance scoring and confidence calibration",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/woshilaohei/mindcore-memory-mcp"
+  },
+  "license": "MIT",
+  "author": "Lao Hei",
+  "mcp_version": "1.0.0",
+  "packages": [
+    {
+      "registry": "pypi",
+      "name": "mindcore-memory",
+      "version": "0.1.3"
+    }
+  ]
+}
