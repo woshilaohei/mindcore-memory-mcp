@@ -10,11 +10,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - uses: actions/setup-node@v4
-      with:
-        node-version: '20'
-    - name: Install MCP publisher
-      run: npm install -g @modelcontextprotocol/publisher
+    
+    - name: Download mcp-publisher
+      run: |
+        curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_Linux_x86_64.tar.gz" -o mcp-publisher.tar.gz
+        tar xzf mcp-publisher.tar.gz mcp-publisher
+        chmod +x mcp-publisher
+        sudo mv mcp-publisher /usr/local/bin/
+    
     - name: Publish to MCP Registry
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
