@@ -1,6 +1,6 @@
 {
   "name": "io.github.woshilaohei/mindcore-memory",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "AI long-term memory MCP server with importance scoring and confidence calibration",
   "repository": {
     "type": "git",
@@ -13,7 +13,7 @@
     {
       "registry": "pypi",
       "name": "mindcore-memory",
-      "version": "0.1.3"
+      "version": "0.1.4"
     }
   ]
 }
