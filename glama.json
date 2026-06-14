@@ -23,7 +23,7 @@
   "mcp": {
     "type": "python",
     "package": "mindcore-memory",
-    "version": "0.1.10",
+    "version": "0.1.11",
     "server_script": "mindcore_memory/server.py"
   }
 }
