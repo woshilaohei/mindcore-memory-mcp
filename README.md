@@ -13,6 +13,10 @@ AI agents forget everything between sessions. MindCore Memory gives them persist
 [![MCP Registry](https://img.shields.io/badge/MCP-Registry-blue.svg)](https://registry.modelcontextprotocol.io/servers/io.github.woshilaohei/mindcore-memory)
 [![GitHub stars](https://img.shields.io/github/stars/woshilaohei/mindcore-memory-mcp?style=social)](https://github.com/woshilaohei/mindcore-memory-mcp/stargazers)
 
+<p align="center">
+  <img src="docs/demo.gif" alt="MindCore Memory demo" width="800">
+</p>
+
 ---
 
 ## Quick Start
