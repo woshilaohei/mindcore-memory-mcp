@@ -21,8 +21,8 @@ jobs:
         chmod +x mcp-publisher
         sudo mv mcp-publisher /usr/local/bin/
     
+    - name: Authenticate to MCP Registry
+      run: mcp-publisher login github-oidc
+    
     - name: Publish to MCP Registry
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
-        mcp-publisher publish --server-json server.json
+      run: mcp-publisher publish --server-json server.json
