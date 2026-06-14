@@ -77,6 +77,32 @@ pip install mindcore-memory[semantic]
 
 ---
 
+## Unique: 3D Boundary Balance Algorithm
+
+MindCore is not just a memory store — it's a **cognitive boundary engine**. Every stored memory is automatically evaluated through a 4-dimensional scoring system based on the **正反公式 (Forward/Reverse Formula)**:
+
+```
+BND_score = 0.28·TRJ(Trajectory) + 0.28·EVO(Evolution) + 0.28·COG(Cognition) + 0.16·BALANCE
+```
+
+- **Forward cycle**: TRJ → BND → EVO → COG → BND (each step draws a boundary, each boundary is growth)
+- **Reverse chain**: Chaos → Unknown → Risk → Harm → Death (2+ linked triggers → auto 50% score penalty)
+- **3D balance**: Variance across TRJ/EVO/COG penalizes lopsided memories (pure data dumps without insight)
+- **No LLM calls**: Pure algorithmic evaluation using keyword patterns, regex, and statistical variance
+
+```python
+from mindcore_memory import BNDManager
+bnd = BNDManager()
+result = bnd.evaluate("基于之前修复, 理解到根因, 改进后提升30%", importance=4)
+# → TRJ:0.63  EVO:0.54  COG:0.61  BALANCE:0.98  BND:0.75  ACCEPTED
+```
+
+> 📖 [Full algorithm documentation](docs/boundary-algorithm.md)
+
+**No other MCP memory server does this.** BND transforms memory storage from a passive data dump into an active cognitive filter — rejecting noise, flagging risk chains, and ensuring only structured, growth-oriented knowledge enters the version chain.
+
+---
+
 ## Production Features
 
 ### Resilience Layer
@@ -97,14 +123,22 @@ pip install mindcore-memory[semantic]
 
 ## Core Tools
 
+### Memory (6 tools)
 | Tool | Description | Key Parameters |
 |------|-------------|---------------|
-| `memory_store` | Persist a memory | `content`, `importance` (1-4), `tags`, `confidence` |
-| `memory_recall` | Search memories | `query`, `tags`, `limit`, `session_id` |
+| `memory_store` | Persist a memory (auto-BND evaluated) | `content`, `importance` (1-4), `tags`, `confidence` |
+| `memory_recall` | Search memories (BM25+FAISS hybrid) | `query`, `tags`, `limit`, `session_id` |
 | `memory_context` | Build LLM context window | `query`, `max_tokens`, `session_id` |
 | `memory_update_confidence` | Adjust memory confidence | `memory_id`, `confidence` |
 | `memory_delete` | Remove a memory | `memory_id` |
 | `memory_stats` | System statistics | (no args) |
+
+### Boundary & Deduction (3 tools) 🆕
+| Tool | Description | Key Parameters |
+|------|-------------|---------------|
+| `bnd_check` | 4D boundary evaluation (TRJ/EVO/COG/BALANCE + Anti-Chain) | `content`, `importance`, `confidence`, `tags` |
+| `bnd_stats` | BND manager stats: acceptance rate, scores, anti-chain triggers | (no args) |
+| `deduce` | Cognitive deduction: pattern extraction from high-quality memories | `query`, `tags` |
 
 **Search formula**: `score = BM25(40%) + FAISS(50%) + importance(5%) + recency(5%)`
 

@@ -31,6 +31,8 @@ from mcp.types import (
 )
 
 from .memory_engine import MemoryEngine
+from .bnd import BNDManager
+from .deduction import DeductionEngine
 
 logger = structlog.get_logger()
 
@@ -39,6 +41,23 @@ server = Server("mindcore-memory-mcp")
 
 # Global engine instance
 _engine: MemoryEngine | None = None
+_bnd_manager: BNDManager | None = None
+_deduction_engine: DeductionEngine | None = None
+
+
+def _get_bnd_manager() -> BNDManager:
+    global _bnd_manager
+    if _bnd_manager is None:
+        _bnd_manager = BNDManager()
+    return _bnd_manager
+
+
+def _get_deduction_engine() -> DeductionEngine:
+    global _deduction_engine
+    if _deduction_engine is None:
+        _deduction_engine = DeductionEngine()
+        _deduction_engine.set_bnd_manager(_get_bnd_manager())
+    return _deduction_engine
 
 # Rate limiter (L-004 fix): token bucket
 _RATE_LIMIT = 100     # max requests per window
@@ -227,6 +246,66 @@ async def list_tools() -> list[Tool]:
                 "required": ["memory_id"],
             },
         ),
+        Tool(
+            name="bnd_check",
+            description="Evaluate content through the 3D Boundary balance algorithm (正反公式). Returns 4D scores (TRJ/EVO/COG/BALANCE) and accept/reject decision.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "content": {
+                        "type": "string",
+                        "description": "Content to evaluate through the boundary algorithm.",
+                    },
+                    "importance": {
+                        "type": "integer",
+                        "description": "User-assigned importance 1-4.",
+                        "minimum": 1,
+                        "maximum": 4,
+                        "default": 2,
+                    },
+                    "confidence": {
+                        "type": "number",
+                        "description": "Confidence 0.0-1.0.",
+                        "minimum": 0.0,
+                        "maximum": 1.0,
+                        "default": 0.5,
+                    },
+                    "tags": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Tags for cognition dimension scoring.",
+                    },
+                },
+                "required": ["content"],
+            },
+        ),
+        Tool(
+            name="bnd_stats",
+            description="Get BND manager stats: acceptance rate, score distributions, anti-chain triggers.",
+            inputSchema={
+                "type": "object",
+                "properties": {},
+            },
+        ),
+        Tool(
+            name="deduce",
+            description="Run the Deduction engine on stored memories to derive new cognitive insights. Finds patterns across high-quality COG memories.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "What domain or question to focus deduction on.",
+                    },
+                    "tags": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Filter deduction sources by tags (optional).",
+                    },
+                },
+                "required": ["query"],
+            },
+        ),
     ]
 
 
@@ -267,6 +346,19 @@ def _sanitize_arguments(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
 
     elif name == "memory_stats":
         pass  # no arguments
+
+    elif name == "bnd_check":
+        result["content"] = str(arguments.get("content", ""))
+        result["importance"] = max(1, min(4, int(arguments.get("importance", 2))))
+        result["confidence"] = max(0.0, min(1.0, float(arguments.get("confidence", 0.5))))
+        result["tags"] = _sanitize_tags(arguments.get("tags"))
+
+    elif name == "bnd_stats":
+        pass  # no arguments
+
+    elif name == "deduce":
+        result["query"] = str(arguments.get("query", ""))
+        result["tags"] = _sanitize_tags(arguments.get("tags"))
 
     return result
 
@@ -434,6 +526,81 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> CallToolResult:
                 content=[TextContent(type="text", text=json.dumps({
                     "success": success,
                     "memory_id": args["memory_id"],
+                }, ensure_ascii=False))],
+                isError=False,
+            )
+
+        elif name == "bnd_check":
+            bnd_mgr = _get_bnd_manager()
+            result = bnd_mgr.evaluate(
+                content=args["content"],
+                importance=args["importance"],
+                confidence=args["confidence"],
+                tags=args.get("tags"),
+            )
+            return CallToolResult(
+                content=[TextContent(type="text", text=json.dumps({
+                    "bnd_score": result.bnd_score,
+                    "accepted": result.accepted,
+                    "dimensions": result.dimensions,
+                    "balance": result.balance,
+                    "anti_chain_triggered": result.anti_chain_triggered,
+                    "anti_chain_detail": result.anti_chain_detail,
+                }, ensure_ascii=False))],
+                isError=False,
+            )
+
+        elif name == "bnd_stats":
+            bnd_mgr = _get_bnd_manager()
+            return CallToolResult(
+                content=[TextContent(type="text", text=json.dumps(
+                    bnd_mgr.stats, ensure_ascii=False
+                ))],
+                isError=False,
+            )
+
+        elif name == "deduce":
+            engine = get_engine()
+            # 获取高质量记忆作为推理源
+            source_memories = engine.recall(
+                query=args["query"],
+                tags=args.get("tags"),
+                limit=50,
+            )
+            # 转换为 dict 列表
+            memory_dicts = [
+                {
+                    "content": r.memory.content,
+                    "importance": r.memory.importance,
+                    "confidence": r.confidence,
+                    "tags": r.memory.tags,
+                    "bnd_score": getattr(r, "bnd_score", r.relevance_score),
+                }
+                for r in source_memories
+            ]
+            ded_engine = _get_deduction_engine()
+            result = ded_engine.deduce(memory_dicts, query=args["query"])
+
+            if result is None:
+                return CallToolResult(
+                    content=[TextContent(type="text", text=json.dumps({
+                        "status": "insufficient_sources",
+                        "message": "Not enough high-quality COG memories to derive insight. "
+                                   "Need at least 3 memories with BND >= 0.5 and COG >= 0.35.",
+                    }, ensure_ascii=False))],
+                    isError=False,
+                )
+
+            return CallToolResult(
+                content=[TextContent(type="text", text=json.dumps({
+                    "status": "deduction_generated",
+                    "insight": result.insight,
+                    "source_count": result.source_count,
+                    "source_tags": result.source_tags,
+                    "confidence": result.confidence,
+                    "validated": result.validated,
+                    "bnd_result": result.bnd_result,
+                    "keywords": result.keywords,
                 }, ensure_ascii=False))],
                 isError=False,
             )

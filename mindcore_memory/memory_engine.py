@@ -226,6 +226,7 @@ class MemoryEngine:
         max_memories: int = 10000,
         recall_limit: int = 20,
         encrypt_key: Optional[bytes] = None,
+        bnd_manager=None,
     ):
         if storage_path:
             self.storage_path = Path(storage_path).resolve()
@@ -254,12 +255,19 @@ class MemoryEngine:
             logger.info("encryption_enabled")
         self._encrypt_key = encrypt_key
 
+        # BND Boundary Manager (optional 3D balance evaluation)
+        self._bnd_manager = bnd_manager
+
         self.storage_path.mkdir(parents=True, exist_ok=True)
         self.memory_file = self.storage_path / "memories.jsonl"
 
         self._load()
         logger.info("memory_engine_initialized", storage_path=str(self.storage_path),
                      count=len(self._memories), encrypted=self._fernet is not None)
+
+    def set_bnd_manager(self, mgr):
+        """注入 BND 管理器，后续 store() 自动执行三维平衡评估。"""
+        self._bnd_manager = mgr
 
     def _validate_storage_path(self) -> None:
         """M-001 fix: prevent path traversal into system directories."""
@@ -548,8 +556,31 @@ class MemoryEngine:
             for tag in entry.tags:
                 self._index.setdefault(tag, set()).add(entry.id)
 
+        # BND auto-evaluation: 每一条记忆自动过三维平衡边界算法
+        bnd_eval = None
+        if self._bnd_manager:
+            try:
+                bnd_eval = self._bnd_manager.evaluate(
+                    content=content,
+                    importance=entry.importance,
+                    confidence=confidence,
+                    tags=entry.tags,
+                )
+                entry.metadata["bnd_score"] = bnd_eval.bnd_score
+                entry.metadata["bnd_accepted"] = bnd_eval.accepted
+                entry.metadata["bnd_dimensions"] = bnd_eval.dimensions
+                entry.metadata["bnd_balance"] = bnd_eval.balance
+                entry.metadata["bnd_anti_chain"] = bnd_eval.anti_chain_triggered
+                if not bnd_eval.accepted:
+                    logger.info("bnd_rejected", memory_id=entry.id,
+                               bnd_score=round(bnd_eval.bnd_score, 3),
+                               dimensions=bnd_eval.dimensions)
+            except Exception as e:
+                logger.warning("bnd_eval_error", error=str(e))
+
         self._save(entry)
-        logger.info("memory_stored", memory_id=entry.id, importance=entry.importance, tags=entry.tags)
+        logger.info("memory_stored", memory_id=entry.id, importance=entry.importance,
+                     tags=entry.tags, bnd_accepted=bnd_eval.accepted if bnd_eval else None)
         try:
             from .metrics import get_collector
             c = get_collector(); c.record_success("store") if c else None
