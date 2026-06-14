@@ -23,4 +23,5 @@ jobs:
     
     - name: Publish to MCP Registry
       run: |
+        mcp-publisher login github
         mcp-publisher publish --server-json server.json
