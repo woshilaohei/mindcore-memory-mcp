@@ -165,6 +165,12 @@ When FAISS embeddings are unavailable, automatically falls back to BM25-only key
 
 ---
 
+## Full Comparison
+
+See [docs/comparison.md](docs/comparison.md) for a detailed 5-server comparison covering architecture, search quality, latency, and migration guides.
+
+---
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guide. Quick path:
