@@ -266,7 +266,7 @@ class MemoryEngine:
                      count=len(self._memories), encrypted=self._fernet is not None)
 
     def set_bnd_manager(self, mgr):
-        """注入 BND 管理器，后续 store() 自动执行三维平衡评估。"""
+        """Inject BND manager; subsequent store() calls auto-execute 3D boundary evaluation."""
         self._bnd_manager = mgr
 
     def _validate_storage_path(self) -> None:
@@ -556,7 +556,7 @@ class MemoryEngine:
             for tag in entry.tags:
                 self._index.setdefault(tag, set()).add(entry.id)
 
-        # BND auto-evaluation: 每一条记忆自动过三维平衡边界算法
+        # BND auto-evaluation: every memory auto-passes 3D boundary algorithm
         bnd_eval = None
         if self._bnd_manager:
             try:

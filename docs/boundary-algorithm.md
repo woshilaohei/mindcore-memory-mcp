@@ -1,84 +1,84 @@
-# 三维平衡边界算法 — BND Boundary Manager
+# 3D Balanced Boundary Algorithm — BND Boundary Manager
 
-**MindCore Memory 的核心推演引擎。**
+**The core inference engine of MindCore Memory.**
 
-这是世界上第一个将「正反公式」编码为可执行算法的边界评估系统。每条记忆写入时自动经过四维评分（TRJ/EVO/COG/BALANCE），反推公式实时检测衰减链，低于阈值的记忆被过滤，触发反推链的记忆被降权 50%。
-
----
-
-## 算法原理
-
-### 正推公式（正向循环）
-
-```
-轨迹(TRJ) = 边界(BND) = 进化(EVO) = 认知(COG) = 边界(BND)
-```
-
-每走一步画一条边界，每条边界是一次进化，每次进化是一层认知，每层认知又画出新的边界。
-
-### 反推公式（衰减断裂链）
-
-```
-无序 → 未知 → 风险 → 伤害 → 消亡
-```
-
-断掉任何一个等号，就能活。算法检测 2+ 环的连环触发并自动降权。
+This is the world's first boundary evaluation system that encodes the "Forward/Reverse Formulas" into executable algorithms. Every memory write is automatically scored across four dimensions (TRJ/EVO/COG/BALANCE). The reverse formula detects decay chains in real time. Memories below threshold are filtered; memories triggering reverse chains are penalized by 50%.
 
 ---
 
-## 四维评分
+## Algorithm Principles
+
+### Forward Formula (Positive Cycle)
+
+```
+Trajectory(TRJ) = Boundary(BND) = Evolution(EVO) = Cognition(COG) = Boundary(BND)
+```
+
+Every step draws a boundary; every boundary is an evolution; every evolution is a layer of cognition; every layer of cognition draws new boundaries.
+
+### Reverse Formula (Decay/Break Chain)
+
+```
+Chaos/Disorder → Unknown → Risk → Harm → Death/Extinction
+```
+
+Break any equals sign, and you survive. The algorithm detects 2+ ring chain triggers and automatically applies penalty weighting.
+
+---
+
+## Four-Dimensional Scoring
 
 ```
 BND_score = 0.28·TRJ + 0.28·EVO + 0.28·COG + 0.16·BALANCE
 ```
 
-### 维度说明
+### Dimension Descriptions
 
-| 维度 | 评估内容 | 关键词/模式 |
-|------|---------|-----------|
-| **TRJ 轨迹** | 连续性、进展性、引用关联 | "基于上次"、"继续推进"、"完成" |
-| **EVO 进化** | 增长信号、量化改进、版本跃迁 | "修复"、"提升30%"、"v2.0" |
-| **COG 认知** | 根因分析、因果推理、标签丰富度 | "根因在于"、"因为...所以..." |
-| **BALANCE** | 三维方差归一化 | balance = 1/(1+var×6) |
+| Dimension | Evaluates | Keywords/Patterns |
+|-----------|-----------|-------------------|
+| **TRJ Trajectory** | Continuity, progress, reference linkage | "based on previous", "continue", "completed" |
+| **EVO Evolution** | Growth signals, quantitative improvement, version leap | "fixed", "improved 30%", "v2.0" |
+| **COG Cognition** | Root cause analysis, causal reasoning, tag richness | "root cause", "because... therefore..." |
+| **BALANCE** | Variance normalization of 3D | balance = 1/(1+var×6) |
 
-### 平衡度计算
+### Balance Calculation
 
 ```python
 variance = Var([TRJ, EVO, COG])
 balance = 1.0 / (1.0 + variance * 6.0)
 ```
 
-方差越小（三维越均衡），balance 越高。维度失衡的记忆（如只有 EVO 维度高）会自动降低平衡分。
+Lower variance (more balanced 3D) → higher balance. Unbalanced memories (e.g., only EVO dimension high) automatically lower balance score.
 
 ---
 
-## 反推公式检测
+## Reverse Formula Detection
 
-扫描记忆内容，匹配五环衰减链关键词：
+Scans memory content, matches five-ring decay chain keywords:
 
-| 环 | 关键词 | 权重 |
-|----|--------|------|
-| 无序 | 混乱、无序、矛盾、不可控 | 触发警报 |
-| 未知 | 未知、不确定、缺失 | 连环触发→降权 |
-| 风险 | 风险、危险、隐患、漏洞 | 连环触发→降权 |
-| 伤害 | 崩溃、失败、损坏 | 连环触发→降权 |
-| 消亡 | 废弃、过时、淘汰 | 连环触发→降权 |
+| Ring | Keywords | Weight |
+|------|-----------|--------|
+| Chaos/Disorder | chaos, disorder, contradiction, uncontrollable | Alert trigger |
+| Unknown | unknown, uncertain, missing | Chain trigger → penalty |
+| Risk | risk, danger, vulnerability, flaw | Chain trigger → penalty |
+| Harm | crash, failure, damage, broken | Chain trigger → penalty |
+| Death/Extinction | deprecated, obsolete, eliminated | Chain trigger → penalty |
 
-**触发规则**: 2+ 环同时命中 → BND_score × 0.5
+**Trigger Rule**: 2+ rings hit simultaneously → `BND_score × 0.5`
 
 ---
 
-## 决策规则
+## Decision Rules
 
 ```
-BND_score >= 0.40 → ACCEPT → 进入 BND 版本链
-BND_score <  0.40 → REJECT → 仅保留 EXP 经验层
-反推链 2+ 环触发  → PENALTY → 降权 50% 后重新判定
+BND_score >= 0.40 → ACCEPT → enters BND version chain
+BND_score <  0.40 → REJECT → retained only in EXP experience layer
+Reverse chain 2+ rings triggered → PENALTY → re-evaluate at 50% weight
 ```
 
 ---
 
-## 使用方式
+## Usage
 
 ### Python API
 
@@ -87,12 +87,12 @@ from mindcore_memory import BNDManager
 
 bnd = BNDManager()
 
-# 评估一条记忆
+# Evaluate a memory
 result = bnd.evaluate(
-    "基于之前修复的BM25问题，理解到根因在于重要性污染，提升准确率30%",
+    "Based on the previous BM25 fix, root cause identified as importance contamination, accuracy improved 30%",
     importance=4,
     confidence=0.9,
-    tags=["修复", "根因分析"],
+    tags=["fix", "root-cause"],
 )
 
 print(f"BND: {result.bnd_score:.3f}")       # 0.750
@@ -109,51 +109,52 @@ print(f"Accepted: {result.accepted}")        # True
 {
   "tool": "bnd_check",
   "arguments": {
-    "content": "内容文本",
+    "content": "content text",
     "importance": 3,
     "confidence": 0.7,
-    "tags": ["标签1", "标签2"]
+    "tags": ["tag1", "tag2"]
   }
 }
 ```
 
-### 自动集成
+### Auto Integration
 
-MemoryEngine 在创建时注入 BNDManager，每条 `store()` 自动执行四维评估：
+MemoryEngine injects BNDManager at creation. Every `store()` automatically runs 4D evaluation:
 
 ```python
 from mindcore_memory import MemoryEngine, BNDManager
 
 engine = MemoryEngine(bnd_manager=BNDManager())
-engine.store("...")  # 自动走BND评估，结果存入metadata
+engine.store("...")  # Auto BND evaluation, result stored in metadata
 ```
 
 ---
 
-## 性能
+## Performance
 
-- **纯算法驱动**: 零 LLM 调用，零网络请求
-- **单次评估耗时**: < 1ms（关键词匹配 + 正则 + 方差计算）
-- **不阻塞存储**: 评估失败降级为 INFO 日志，不影响主流程
-- **无外部依赖**: 仅使用 Python 标准库（re, math, dataclasses）
-
----
-
-## 设计哲学
-
-1. **正推为魂** — 轨迹→边界→进化→认知→边界，循环不息
-2. **反推为盾** — 无序必被检测，衰减链必须断裂
-3. **先认知后动手** — BND 评估是写入前的最后一道认知关
-4. **纯算法不调LLM** — 推理引擎做模式识别，不做LLM调用
+- **Algorithm-only**: Zero LLM calls, zero network requests
+- **Single evaluation**: < 1ms (keyword matching + regex + variance)
+- **Non-blocking**: Evaluation failure degrades to INFO log, doesn't block main flow
+- **Zero external deps**: Python standard library only (re, math, dataclasses)
 
 ---
 
-## 与 Bee Memory 的关系
+## Design Philosophy
 
-Bee Memory v5.x 的「五维记忆池(EXP/TRJ/COG/BND/CTX)」是概念原型：
-- EXP → 当前 `memory_store` 的存储层
-- TRJ/COG/BND → 已在 BNDManager 中实现为三维评分
-- CTX → 对应 `memory_context` 工具
-- 虚空引擎(碰撞择优) → 对应 DeductionEngine 的模式提取
+1. **Forward formula as soul** — Trajectory→Boundary→Evolution→Cognition→Boundary, cycle never stops
+2. **Reverse formula as shield** — Chaos must be detected, decay chains must be broken
+3. **Cognition before action** — BND evaluation is the final cognitive gate before write
+4. **Pure algorithm, no LLM** — Inference engine does pattern extraction, not LLM calls
 
-**mindcore-memory 是 Bee Memory 的工业化升级版。**
+---
+
+## Relationship to Bee Memory
+
+Bee Memory v5.x's "Five-Dimensional Memory Pool (EXP/TRJ/COG/BND/CTX)" is the conceptual prototype:
+
+- EXP → current `memory_store` storage layer
+- TRJ/COG/BND → already implemented in BNDManager as 3D scoring
+- CTX → corresponds to `memory_context` tool
+- Void Engine (collision optimization) → corresponds to DeductionEngine's pattern extraction
+
+**MindCore Memory is the industrial-grade upgrade of Bee Memory.**

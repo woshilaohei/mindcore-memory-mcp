@@ -248,7 +248,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="bnd_check",
-            description="Evaluate content through the 3D Boundary balance algorithm (正反公式). Returns 4D scores (TRJ/EVO/COG/BALANCE) and accept/reject decision.",
+            description="Evaluate content through the 3D Boundary balance algorithm (Forward/Reverse Formula). Returns 4D scores (TRJ/EVO/COG/BALANCE) and accept/reject decision.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -561,13 +561,13 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> CallToolResult:
 
         elif name == "deduce":
             engine = get_engine()
-            # 获取高质量记忆作为推理源
+            # Fetch high-quality memories as deduction sources
             source_memories = engine.recall(
                 query=args["query"],
                 tags=args.get("tags"),
                 limit=50,
             )
-            # 转换为 dict 列表
+            # Convert to dict list
             memory_dicts = [
                 {
                     "content": r.memory.content,
