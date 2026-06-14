@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.1.11] — 2026-06-14
+
+### Added
+- **GitHub Releases**: 首次创建 GitHub Release 页面
+- **MCP Registry 发布**: 正式发布到 [MCP Official Registry](https://registry.modelcontextprotocol.io/servers/io.github.woshilaohei/mindcore-memory)
+
+### Changed
+- CI 流水线分离: `ci.yml` 纯测试（push + PR + workflow_dispatch），`publish-mcp.yml` 统一处理 PyPI + MCP Registry 发布（tag push）
+- `twine upload` 直接上传 PyPI，移除中间仓库依赖
+
+### Fixed
+- Tag push 同一 SHA 不触发 CI → 确保新 commit 再打 tag
+
+## [0.1.10] — 2026-06-14
+
+### Fixed
+- **P0** CI `test_security.py`: `/tmp` 路径保护 → `TMPDIR` 环境变量指定安全目录
+- **P0** CI 表达式错误: `${{ runner.temp }}` 无效 → `${{ github.workspace }}/_temp`
+- **P0** Tag push 不触发 CI: GitHub Actions 相同 SHA 去重
+
+### Changed
+- `ci.yml` + `publish-mcp.yml` 流程重构，分阶段修复
+- 版本号 0.1.9 → 0.1.10，确保新 commit + tag 触发 CI
+
 ## [0.1.9] — 2026-06-14
 
 ### Added
