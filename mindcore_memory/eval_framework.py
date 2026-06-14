@@ -74,7 +74,14 @@ class MemoryEvaluator:
     
     def cleanup(self) -> None:
         """Clean up temp storage."""
-        if str(self.storage_path).startswith("/tmp/"):
+        # M-007 fix: Windows temp dirs don't start with "/tmp/"
+        tmp_prefixes = ("/tmp/", "\\tmp\\")
+        storage = str(self.storage_path)
+        if any(storage.startswith(p) for p in tmp_prefixes):
+            shutil.rmtree(self.storage_path, ignore_errors=True)
+            return
+        # Also clean if path contains temp/mindcore_eval_ markers
+        if "mindcore_eval_" in storage:
             shutil.rmtree(self.storage_path, ignore_errors=True)
     
     def eval_storage_integrity(self) -> EvalResult:

@@ -32,4 +32,8 @@ jobs:
         python-version: '3.11'
     - run: pip install build twine
     - run: python -m build
-    - run: twine upload --skip-existing -u __token__ -p "${{ secrets.PYPI_TOKEN }}" dist/*
+    - run: twine upload --verbose --skip-existing -u __token__ -p "${{ secrets.PYPI_TOKEN }}" dist/*
+    - name: Check if upload was skipped
+      run: |
+        echo "If the version already exists on PyPI, twine will skip it (logged above)."
+        echo "To force a new release, bump the version in pyproject.toml."

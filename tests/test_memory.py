@@ -82,6 +82,11 @@ class TestMemoryRecall:
 
 class TestImportanceWeighting:
     def test_high_importance_ranks_higher(self, engine):
+        # This test requires semantic embeddings to match "important note" →
+        # "Critical fact: server is down". Without FAISS, BM25 alone can't
+        # bridge the semantic gap. Skip if embedder unavailable.
+        if not engine.embedder_available():
+            pytest.skip("semantic embeddings not available (no sentence-transformers)")
         engine.store("Low priority note", importance=1)
         engine.store("Critical fact: server is down", importance=4)
         

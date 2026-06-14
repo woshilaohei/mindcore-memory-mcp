@@ -1,5 +1,5 @@
 """
-MindCore Memory MCP Server - Production-grade.
+MindCore Memory MCP Server - v0.1.9 Production-Hardened.
 
 Supports both stdio (local/IDE) and Streamable HTTP transports.
 Both transports share the same tool registry for consistency.
@@ -18,6 +18,8 @@ from typing import Any
 import argparse
 import json
 import os
+import time
+import threading
 
 import structlog
 from mcp.server import Server
@@ -38,13 +40,47 @@ server = Server("mindcore-memory-mcp")
 # Global engine instance
 _engine: MemoryEngine | None = None
 
+# Rate limiter (L-004 fix): token bucket
+_RATE_LIMIT = 100     # max requests per window
+_RATE_WINDOW = 60     # window in seconds
+_rates: dict[str, list[float]] = {}
+_rate_lock = threading.Lock()
+
+
+def _check_rate(client_id: str = "default") -> bool:
+    """Return True if within rate limit, False if exceeded."""
+    now = time.time()
+    with _rate_lock:
+        timestamps = _rates.get(client_id, [])
+        timestamps = [t for t in timestamps if now - t < _RATE_WINDOW]
+        if len(timestamps) >= _RATE_LIMIT:
+            _rates[client_id] = timestamps
+            return False
+        timestamps.append(now)
+        _rates[client_id] = timestamps
+        # Cleanup old entries periodically
+        if len(_rates) > 1000:
+            stale = [k for k, v in _rates.items() if not v or now - v[-1] > _RATE_WINDOW * 2]
+            for k in stale:
+                del _rates[k]
+        return True
+
 
 def get_engine() -> MemoryEngine:
     """Get or create the memory engine."""
     global _engine
     if _engine is None:
         storage_path = os.environ.get("MINDCORE_MEMORY_PATH")
-        _engine = MemoryEngine(storage_path=storage_path)
+        # L-003 fix: optional encryption key from env
+        import base64
+        encrypt_key = None
+        raw_key = os.environ.get("MINDCORE_ENCRYPT_KEY")
+        if raw_key:
+            try:
+                encrypt_key = base64.urlsafe_b64decode(raw_key.encode("ascii"))
+            except Exception:
+                logger.warning("invalid_encrypt_key", hint="Must be base64-encoded 32-byte key")
+        _engine = MemoryEngine(storage_path=storage_path, encrypt_key=encrypt_key)
     return _engine
 
 
@@ -177,6 +213,20 @@ async def list_tools() -> list[Tool]:
                 "properties": {},
             },
         ),
+        Tool(
+            name="memory_delete",
+            description="Delete a memory by its ID. Irreversible — use with caution.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "memory_id": {
+                        "type": "string",
+                        "description": "The memory ID to delete.",
+                    },
+                },
+                "required": ["memory_id"],
+            },
+        ),
     ]
 
 
@@ -184,20 +234,130 @@ async def list_tools() -> list[Tool]:
 # Tool Implementations
 # =============================================================================
 
+def _sanitize_arguments(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    """H-001 fix: validate and sanitize all tool arguments before processing."""
+    result: dict[str, Any] = {}
+
+    if name == "memory_store":
+        result["content"] = str(arguments.get("content", ""))
+        result["importance"] = max(1, min(4, int(arguments.get("importance", 2))))
+        result["tags"] = _sanitize_tags(arguments.get("tags"))
+        result["session_id"] = _sanitize_session_id(arguments.get("session_id"))
+        result["confidence"] = max(0.0, min(1.0, float(arguments.get("confidence", 0.5))))
+        result["source"] = str(arguments.get("source", "agent"))[:32]
+        result["metadata"] = _sanitize_metadata(arguments.get("metadata"))
+
+    elif name == "memory_recall":
+        result["query"] = str(arguments.get("query", ""))
+        result["tags"] = _sanitize_tags(arguments.get("tags"))
+        result["session_id"] = _sanitize_session_id(arguments.get("session_id"))
+        result["limit"] = max(1, min(100, int(arguments.get("limit", 10))))
+
+    elif name == "memory_context":
+        result["query"] = str(arguments.get("query", ""))
+        result["max_tokens"] = max(1, min(100_000, int(arguments.get("max_tokens", 2000))))
+        result["session_id"] = _sanitize_session_id(arguments.get("session_id"))
+
+    elif name == "memory_update_confidence":
+        result["memory_id"] = str(arguments.get("memory_id", ""))[:64]
+        result["confidence"] = max(0.0, min(1.0, float(arguments.get("confidence", 0.5))))
+
+    elif name == "memory_delete":
+        result["memory_id"] = str(arguments.get("memory_id", ""))[:64]
+
+    elif name == "memory_stats":
+        pass  # no arguments
+
+    return result
+
+
+def _sanitize_tags(tags: Any) -> list[str]:
+    """Sanitize tag list: only strings, max 100 chars each, max 50 tags."""
+    if not isinstance(tags, list):
+        return []
+    cleaned = []
+    for t in tags:
+        if t is None:
+            continue
+        s = str(t)[:100].strip()
+        if s and s not in cleaned:
+            cleaned.append(s)
+        if len(cleaned) >= 50:
+            break
+    return cleaned
+
+
+def _sanitize_string(value: Any, max_len: int = 256) -> str | None:
+    """Sanitize optional string field."""
+    if value is None:
+        return None
+    s = str(value)[:max_len].strip()
+    return s if s else None
+
+
+def _sanitize_session_id(value: Any) -> str | None:
+    """L-008 fix: validate session_id format (alphanumeric + : _ -)."""
+    if value is None:
+        return None
+    import re
+    s = str(value)[:128].strip()
+    if not s:
+        return None
+    if not re.match(r'^[a-zA-Z0-9:_\-]+$', s):
+        raise ValueError(
+            f"session_id contains invalid characters. "
+            f"Only alphanumeric, colon, underscore and hyphen allowed: '{s}'"
+        )
+    return s
+
+
+def _sanitize_metadata(metadata: Any) -> dict[str, Any]:
+    """Sanitize metadata: shallow dict only, max 20 keys."""
+    if not isinstance(metadata, dict):
+        return {}
+    result = {}
+    for k, v in metadata.items():
+        if len(result) >= 20:
+            break
+        key = str(k)[:64]
+        if isinstance(v, (str, int, float, bool)):
+            result[key] = v
+        elif isinstance(v, list):
+            result[key] = [str(x)[:256] for x in v[:10]]
+        elif v is None:
+            result[key] = None
+        else:
+            result[key] = str(v)[:256]
+    return result
+
+
 @server.call_tool()
 async def call_tool(name: str, arguments: dict[str, Any]) -> CallToolResult:
     """Execute a tool call."""
+    # L-004 fix: rate limiting
+    if not _check_rate():
+        return CallToolResult(
+            content=[TextContent(
+                type="text",
+                text=f"Rate limit exceeded: max {_RATE_LIMIT} requests per {_RATE_WINDOW}s. Please slow down."
+            )],
+            isError=True,
+        )
+
     engine = get_engine()
-    
+
+    # H-001 fix: sanitize all inputs before processing
+    args = _sanitize_arguments(name, arguments)
+
     try:
         if name == "memory_store":
             memory_id = engine.store(
-                content=arguments["content"],
-                importance=arguments.get("importance", 2),
-                tags=arguments.get("tags"),
-                session_id=arguments.get("session_id"),
-                confidence=arguments.get("confidence", 0.5),
-                source=arguments.get("source", "agent"),
+                content=args["content"],
+                importance=args["importance"],
+                tags=args["tags"],
+                session_id=args.get("session_id"),
+                confidence=args["confidence"],
+                source=args["source"],
             )
             return CallToolResult(
                 content=[TextContent(type="text", text=json.dumps({
@@ -209,10 +369,10 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> CallToolResult:
         
         elif name == "memory_recall":
             results = engine.recall(
-                query=arguments["query"],
-                tags=arguments.get("tags"),
-                session_id=arguments.get("session_id"),
-                limit=arguments.get("limit", 10),
+                query=args["query"],
+                tags=args["tags"],
+                session_id=args.get("session_id"),
+                limit=args["limit"],
             )
             
             output = {
@@ -238,9 +398,9 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> CallToolResult:
         
         elif name == "memory_context":
             context = engine.get_context_window(
-                query=arguments["query"],
-                max_tokens=arguments.get("max_tokens", 2000),
-                session_id=arguments.get("session_id"),
+                query=args["query"],
+                max_tokens=args["max_tokens"],
+                session_id=args.get("session_id"),
             )
             return CallToolResult(
                 content=[TextContent(type="text", text=context)],
@@ -249,14 +409,14 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> CallToolResult:
         
         elif name == "memory_update_confidence":
             success = engine.update_confidence(
-                memory_id=arguments["memory_id"],
-                confidence=arguments["confidence"],
+                memory_id=args["memory_id"],
+                confidence=args["confidence"],
             )
             return CallToolResult(
                 content=[TextContent(type="text", text=json.dumps({
                     "success": success,
-                    "memory_id": arguments["memory_id"],
-                    "confidence": arguments["confidence"],
+                    "memory_id": args["memory_id"],
+                    "confidence": args["confidence"],
                 }, ensure_ascii=False))],
                 isError=False,
             )
@@ -267,6 +427,16 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> CallToolResult:
                 content=[TextContent(type="text", text=json.dumps(stats, ensure_ascii=False))],
                 isError=False,
             )
+
+        elif name == "memory_delete":
+            success = engine.delete(memory_id=args["memory_id"])
+            return CallToolResult(
+                content=[TextContent(type="text", text=json.dumps({
+                    "success": success,
+                    "memory_id": args["memory_id"],
+                }, ensure_ascii=False))],
+                isError=False,
+            )
         
         else:
             return CallToolResult(
@@ -274,10 +444,22 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> CallToolResult:
                 isError=True,
             )
     
-    except Exception as e:
-        logger.error("tool_error", tool=name, error=str(e))
+    except ValueError as e:
+        # Expected validation errors: safe to return details
+        logger.warning("tool_validation_error", tool=name, error=str(e))
         return CallToolResult(
-            content=[TextContent(type="text", text=f"Error: {str(e)}")],
+            content=[TextContent(type="text", text=str(e))],
+            isError=True,
+        )
+    except Exception as e:
+        # H-002 fix: sanitize error output — never leak file paths or internals
+        logger.error("tool_error", tool=name, error=str(e), exc_info=True)
+        return CallToolResult(
+            content=[TextContent(
+                type="text",
+                text="Internal error occurred while processing your request. "
+                     "Please check the memory store is accessible and try again."
+            )],
             isError=True,
         )
 
@@ -288,10 +470,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> CallToolResult:
 
 async def main_stdio():
     """Run as stdio MCP server (for Claude Desktop, VS Code, etc.)."""
-    structlog.configure(
-        wrapper_class=structlog.make_filtering_bound_logger(logging_level=20),
-    )
-    
+    # structlog uses defaults (structured JSON to stderr)
     async with stdio_server() as (read_stream, write_stream):
         await server.run(
             read_stream,
@@ -302,10 +481,7 @@ async def main_stdio():
 
 def main():
     """CLI entry point."""
-    structlog.configure(
-        wrapper_class=structlog.make_filtering_bound_logger(logging_level=20),
-    )
-    
+    # structlog uses defaults
     parser = argparse.ArgumentParser(description="MindCore Memory MCP Server")
     parser.add_argument(
         "--transport",

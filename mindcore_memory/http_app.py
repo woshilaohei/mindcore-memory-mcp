@@ -15,19 +15,32 @@ from .memory_engine import MemoryEngine
 
 logger = structlog.get_logger()
 
+# ------------------------------------------------------------------
+# P0 fix: singleton engine — avoid creating new Engine per request
+# ------------------------------------------------------------------
+_engine: Optional[MemoryEngine] = None
+
+
+def _get_engine() -> MemoryEngine:
+    """Lazy-singleton MemoryEngine — reuses the same instance."""
+    global _engine
+    if _engine is None:
+        _engine = MemoryEngine()
+    return _engine
+
 
 def create_http_app(token: Optional[str] = None) -> FastAPI:
     """Create FastAPI app with MCP HTTP endpoint."""
     
-    app = FastAPI(title="MindCore Memory MCP", version="0.1.0")
+    app = FastAPI(title="MindCore Memory MCP", version="0.1.9")
     
-    # CORS: restrict to known origins in production
+    # H-003 fix: CORS — allow_credentials=False when origins are wide-open
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # Tighten in production
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_origins=["*"],
+        allow_credentials=False,   # Cannot use True with wildcard origins (CORS spec)
+        allow_methods=["GET", "POST"],
+        allow_headers=["Content-Type", "Authorization"],
     )
     
     def verify_token(authorization: Optional[str] = Header(None)) -> bool:
@@ -45,13 +58,43 @@ def create_http_app(token: Optional[str] = None) -> FastAPI:
     
     @app.get("/health")
     async def health():
-        """Health check endpoint."""
-        return {"status": "ok", "service": "mindcore-memory-mcp"}
+        """Health check endpoint with component status."""
+        engine = _get_engine()
+        stats = engine.get_stats()
+        return {
+            "status": "ok",
+            "service": "mindcore-memory-mcp",
+            "version": "0.1.9",
+            "components": {
+                "engine": "ok" if stats["total_memories"] >= 0 else "degraded",
+                "faiss": "available" if stats.get("faiss_available") else "degraded_bm25_only",
+                "embedder": "available" if engine.embedder_available() else "unavailable",
+            },
+            "stats": {
+                "total_memories": stats["total_memories"],
+                "faiss_index_type": stats.get("faiss_index_type", "none"),
+            },
+        }
+
+    @app.get("/metrics")
+    async def metrics():
+        """Prometheus metrics endpoint."""
+        from .metrics import get_collector
+        collector = get_collector()
+        if collector:
+            # Update engine gauges
+            engine = _get_engine()
+            stats = engine.get_stats()  # this updates gauges
+        from fastapi.responses import PlainTextResponse
+        return PlainTextResponse(
+            content=collector.render() if collector else "# metrics unavailable\n",
+            media_type="text/plain; charset=utf-8",
+        )
     
     @app.get("/stats")
     async def stats(_: bool = Depends(verify_token)):
         """Get memory stats (requires auth if configured)."""
-        engine = MemoryEngine()
+        engine = _get_engine()
         return engine.get_stats()
     
     @app.post("/mcp")
