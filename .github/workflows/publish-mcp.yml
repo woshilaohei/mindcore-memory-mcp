@@ -8,18 +8,19 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     steps:
     - uses: actions/checkout@v4
     
     - name: Download mcp-publisher
       run: |
-        curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_Linux_x86_64.tar.gz" -o mcp-publisher.tar.gz
-        tar xzf mcp-publisher.tar.gz mcp-publisher
+        curl -fSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_Linux_x86_64.tar.gz" -o mcp-publisher.tar.gz
+        tar xzf mcp-publisher.tar.gz
         chmod +x mcp-publisher
         sudo mv mcp-publisher /usr/local/bin/
     
     - name: Publish to MCP Registry
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        mcp-publisher publish --server-json server.json --registry-url https://registry.modelcontextprotocol.io
+        mcp-publisher publish --server-json server.json

@@ -25,9 +25,6 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
-    environment: pypi
-    permissions:
-      id-token: write
     steps:
     - uses: actions/checkout@v4
     - uses: actions/setup-python@v5
@@ -36,3 +33,5 @@ jobs:
     - run: pip install build twine
     - run: python -m build
     - uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        password: ${{ secrets.PYPI_TOKEN }}
