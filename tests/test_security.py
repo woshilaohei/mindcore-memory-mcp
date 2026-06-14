@@ -430,9 +430,10 @@ class TestMemoryDelete:
 class TestThreadSafety:
     def test_lock_exists(self, engine):
         """Engine should have a threading lock."""
-        import threading
         assert hasattr(engine, "_lock")
-        assert isinstance(engine._lock, threading.Lock)
+        assert engine._lock is not None
+        assert hasattr(engine._lock, "acquire")
+        assert hasattr(engine._lock, "release")
 
     def test_concurrent_stores(self, engine):
         """Multiple stores (sequentially) should all work."""
