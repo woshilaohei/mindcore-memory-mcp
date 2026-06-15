@@ -8,9 +8,6 @@ on:
 jobs:
   publish-pypi:
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: read
     steps:
     - uses: actions/checkout@v4
     - uses: actions/setup-python@v5
@@ -18,8 +15,10 @@ jobs:
         python-version: '3.11'
     - run: pip install build
     - run: python -m build
-    - name: Publish to PyPI
-      uses: pypa/gh-action-pypi-publish@release/v1
+    - run: twine upload --verbose --skip-existing dist/*
+      env:
+        TWINE_USERNAME: __token__
+        TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
 
   publish-mcp-registry:
     needs: publish-pypi
