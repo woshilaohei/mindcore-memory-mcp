@@ -13,12 +13,13 @@ authors = [
 ]
 license = {text = "MIT"}
 
+keywords = ["mcp", "memory", "context", "ai", "llm", "agent"]
+
 [project.urls]
 Homepage = "https://github.com/woshilaohei/mindcore-memory-mcp"
 Repository = "https://github.com/woshilaohei/mindcore-memory-mcp"
 Documentation = "https://github.com/woshilaohei/mindcore-memory-mcp#readme"
-"PyPI" = "https://pypi.org/project/mindcore-memory/"
-keywords = ["mcp", "memory", "context", "ai", "llm", "agent"]
+"PyPI" = "https://pypi.org/project/mindcore-memory/" = ["mcp", "memory", "context", "ai", "llm", "agent"]
 classifiers = [
     "Development Status :: 4 - Beta",
 
