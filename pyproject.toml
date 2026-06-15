@@ -20,6 +20,7 @@ Homepage = "https://github.com/woshilaohei/mindcore-memory-mcp"
 Repository = "https://github.com/woshilaohei/mindcore-memory-mcp"
 Documentation = "https://github.com/woshilaohei/mindcore-memory-mcp#readme"
 "PyPI" = "https://pypi.org/project/mindcore-memory/"
+
 classifiers = [
     "Development Status :: 4 - Beta",
 
